@@ -1,0 +1,37 @@
+digraph G {
+  rankdir=TB; fontname="Helvetica"; nodesep=0.45; ranksep=0.8; compound=true; newrank=true;
+  node [shape=component, style="filled", fillcolor="#EAF2FB", color="#2F5D8C", fontname="Helvetica", fontsize=12];
+  edge [color="#444444", fontname="Helvetica", fontsize=10, arrowsize=0.8];
+
+  subgraph cluster_ui { label="Presentation Layer"; style="rounded,filled"; fillcolor="#F7F7F7"; color="#999999";
+    CLI [label="Console UI (CLI)\nmain.cpp - menus, masked input"]; }
+
+  subgraph cluster_svc { label="Service (Business Logic) Layer"; style="rounded,filled"; fillcolor="#F7F7F7"; color="#999999";
+    Auth [label="AuthService\nregister, login,\nlockout"];
+    Search [label="SearchService\nroute + availability"];
+    Booking [label="BookingService\nvalidation, PNR, RAC/WL,\nreceipt, PNR lookup"];
+    Cancel [label="CancelService\nrefund slabs,\nwaitlist promotion"];
+    Payment [label="PaymentService\n(simulated gateway)"]; }
+
+  subgraph cluster_dom { label="Domain Layer"; style="rounded,filled"; fillcolor="#F7F7F7"; color="#999999";
+    Inventory [label="Inventory\nseat counting,\nqueue position"];
+    Types [label="Domain Model\nUser, Train, Ticket, Database"];
+    Util [label="Util + SHA-256\ndates, validation, hashing"]; }
+
+  subgraph cluster_data { label="Persistence Layer"; style="rounded,filled"; fillcolor="#F7F7F7"; color="#999999";
+    Storage [label="Storage\natomic file I/O"];
+    Files [shape=folder, fillcolor="#FFF4D6", color="#B58900", label="users.dat\ntrains.dat\nbookings.dat"]; }
+
+  CLI -> Auth; CLI -> Search; CLI -> Booking; CLI -> Cancel;
+  CLI -> Storage [constraint=false];
+  Booking -> Payment [label=" charge()"];
+  Booking -> Inventory; Search -> Inventory; Cancel -> Inventory;
+  Auth -> Util [label=" hash"];
+  Inventory -> Types;
+  Storage -> Types [constraint=false, label=" load / save"];
+  Storage -> Files [label=" temp file + rename"];
+  Cancel -> Types [ltail=cluster_svc, style=invis];
+  Note [shape=note, fillcolor="#FFFFFF", color="#999999", fontsize=10,
+        label="All services read and modify the shared Database\n(domain model) held in memory."];
+  Types -> Note [style=dotted, arrowhead=none, constraint=false];
+}
