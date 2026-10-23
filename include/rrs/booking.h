@@ -45,7 +45,8 @@ private:
 
 // PNR status lookup (RRS-F-034); returns nullptr when unknown.
 const Ticket* lookupPnr(const Database& db, const std::string& pnr);
-std::string formatReceipt(const Database& db, const Ticket& t, const std::string& txnId = "");  // RRS-F-025
+std::string formatReceipt(const Database& db, const Ticket& t, const std::string& txnId = "",
+                          const std::string& maskedCard = "");  // RRS-F-025
 std::string pnrFromSeq(long long seq);
 
 }  // namespace rrs
