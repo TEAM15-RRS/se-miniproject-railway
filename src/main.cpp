@@ -129,7 +129,7 @@ struct App {
         auto r = booking.book(req);
         if (!r.ok) { std::cout << "Booking failed: " << r.message << "\n"; return; }
         persist();
-        std::cout << r.message << "\n" << formatReceipt(db, r.ticket, r.txnId);
+        std::cout << r.message << "\n" << formatReceipt(db, r.ticket, r.txnId, PaymentService::mask(req.cardNumber));
     }
 
     void doStatus() {

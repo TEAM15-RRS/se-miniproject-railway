@@ -89,7 +89,8 @@ std::vector<const Ticket*> BookingService::ticketsFor(const std::string& usernam
 
 const Ticket* lookupPnr(const Database& db, const std::string& pnr) { return findTicket(db, trim(pnr)); }
 
-std::string formatReceipt(const Database& db, const Ticket& t, const std::string& txnId) {
+std::string formatReceipt(const Database& db, const Ticket& t, const std::string& txnId,
+                          const std::string& maskedCard) {
     const Train* tr = findTrain(db, t.trainNumber);
     std::ostringstream o;
     o << "========== E-TICKET ==========\n"
@@ -105,7 +106,11 @@ std::string formatReceipt(const Database& db, const Ticket& t, const std::string
         o << "  " << (i + 1) << ". " << t.passengers[i].name << ", " << t.passengers[i].age << ", "
           << t.passengers[i].gender << "\n";
     o << "Total fare: Rs." << t.totalFare << "\n";
-    if (!txnId.empty()) o << "Payment   : " << txnId << "\n";
+    if (!txnId.empty()) {
+        o << "Payment   : " << txnId;
+        if (!maskedCard.empty()) o << " (card " << maskedCard << ")";
+        o << "\n";
+    }
     if (t.status == Status::Cancelled) o << "Refund    : Rs." << t.refundAmount << "\n";
     o << "==============================\n";
     return o.str();
