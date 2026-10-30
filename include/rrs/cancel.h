@@ -6,14 +6,17 @@
 
 namespace rrs {
 
-// Refund policy (assumption A-3 in docs/SPRINT1_PLAN.md - align with SRS section on refunds):
-//   waiting-list ticket ........................ 100 % of fare
-//   >= 48 h before departure ................... 100 % minus Rs.60 per passenger (min 0)
-//   >= 12 h and < 48 h ......................... 75 %
-//   >=  4 h and < 12 h ......................... 50 %
-//   <   4 h (but not yet departed) ............. 0 %
-//   departed ................................... cancellation not allowed
-constexpr int kFlatCancellationFee = 60;
+// Refund policy - SRS RRS-F-031. The slabs are named constants so they are easy to change.
+//   more than 24 h before departure ..... 75 %
+//   12 h to 24 h (inclusive) ............ 50 %
+//   under 12 h (not yet departed) ....... 25 %
+//   departed ............................ cancellation not allowed
+// The same slabs apply to confirmed, RAC and waiting-list tickets (SRS 4.4).
+constexpr long long kRefundOver24hMinutes = 24 * 60;  // strictly more than this -> first slab
+constexpr long long kRefundFrom12hMinutes = 12 * 60;  // this or more (up to 24 h) -> second slab
+constexpr int kRefundPercentOver24h = 75;
+constexpr int kRefundPercent12To24h = 50;
+constexpr int kRefundPercentUnder12h = 25;
 
 int calculateRefund(const Ticket& t, long long departureMinutes, long long nowMinutes);
 

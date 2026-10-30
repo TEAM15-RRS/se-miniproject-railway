@@ -18,13 +18,13 @@ TEST(TC_Cancel_02_RefundSlabBoundaries) {  // RRS-F-031
     // 2 passengers, fare 1000 total
     struct Row { long long before; int expected; };
     Row rows[] = {
-        {48 * 60,       880},  // exactly 48h -> 100% - 60*2
-        {48 * 60 - 1,   750},  // 47h59 -> 75%
-        {12 * 60,       750},  // exactly 12h -> 75%
-        {12 * 60 - 1,   500},  // 11h59 -> 50%
-        {4 * 60,        500},  // exactly 4h -> 50%
-        {4 * 60 - 1,      0},  // 3h59 -> 0
-        {1,               0},  // 1 minute before departure
+        {5 * 24 * 60,   750},  // 5 days before -> 75%
+        {24 * 60 + 1,   750},  // 24h01 -> just over 24h -> 75%
+        {24 * 60,       500},  // exactly 24h -> 50%
+        {12 * 60 + 1,   500},  // 12h01 -> 50%
+        {12 * 60,       500},  // exactly 12h -> 50%
+        {12 * 60 - 1,   250},  // 11h59 -> 25%
+        {1,             250},  // 1 minute before departure -> 25%
     };
     for (const auto& row : rows) {
         Env e;
@@ -36,20 +36,19 @@ TEST(TC_Cancel_02_RefundSlabBoundaries) {  // RRS-F-031
         CHECK_EQ(lookupPnr(e.db, b.ticket.pnr)->refundAmount, row.expected);
     }
 }
-TEST(TC_Cancel_03_RefundNeverNegative) {
+TEST(TC_Cancel_03_RefundRoundsDownToWholeRupees) {
     Env e;
-    e.db.trains[0].classes[0].fare = 20;   // 2 pax -> 40 total < 120 flat fee
-    auto b = bookN(e, "alice", "SL", 2);
-    auto r = e.cancel.cancel(b.ticket.pnr, "alice");
-    CHECK_EQ(r.refund, 0);
+    e.db.trains[0].classes[0].fare = 15;   // 1 passenger: 75% of 15 = 11.25 -> 11
+    auto b = bookN(e, "alice", "SL", 1);
+    CHECK_EQ(e.cancel.cancel(b.ticket.pnr, "alice").refund, 11);
 }
-TEST(TC_Cancel_04_WaitlistTicketFullRefund) {
+TEST(TC_Cancel_04_WaitlistTicketUsesSameSlabs) {  // SRS 4.4: confirmed or waitlisted
     Env e;
     for (int i = 0; i < 6; ++i) bookN(e, "alice", "SL", 1);
     auto w = bookN(e, "bob", "SL", 1);
     CHECK(w.ticket.status == Status::Waitlist);
-    setBefore(e, 60);  // 1 hour before departure
-    CHECK_EQ(e.cancel.cancel(w.ticket.pnr, "bob").refund, 500);
+    setBefore(e, 60);  // 1 hour before departure -> 25% of 500
+    CHECK_EQ(e.cancel.cancel(w.ticket.pnr, "bob").refund, 125);
 }
 TEST(TC_Cancel_05_RejectsUnknownAlreadyCancelledWrongOwnerDeparted) {
     Env e;
