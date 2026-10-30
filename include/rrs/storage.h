@@ -19,6 +19,9 @@ public:
     bool load(Database& db, LoadReport* report = nullptr) const;
     bool save(const Database& db, std::string* error = nullptr) const;
 
+    bool createBackup(std::string& backupPath, std::string* error = nullptr) const;
+    bool restoreBackup(const std::string& backupPath, std::string* error = nullptr) const;
+
     std::string usersPath() const;
     std::string trainsPath() const;
     std::string bookingsPath() const;
