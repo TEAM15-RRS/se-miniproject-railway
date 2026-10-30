@@ -40,3 +40,12 @@ target_include_directories(integration_tests PRIVATE tests)
 
 add_test(NAME unit_tests COMMAND unit_tests)
 add_test(NAME integration_tests COMMAND integration_tests)
+
+# Performance benchmark: search with 5000 trains
+add_executable(search_performance_test
+    tests/performance/search_performance.cpp
+)
+
+target_link_libraries(search_performance_test PRIVATE rrs_core)
+
+add_test(NAME search_performance_test COMMAND search_performance_test)
