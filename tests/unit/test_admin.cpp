@@ -303,3 +303,29 @@ TEST(TC_Admin_18_QuotaValidationIsPerJourneyDate) {
     CHECK(update.ok);
     CHECK_EQ(e.db.trains[0].classes[0].totalSeats, 4);
 }
+
+
+TEST(TC_AdminAccess_RejectsPassengerActions) {
+    Env e;
+    AdminService admin(e.db, e.clock);
+    admin.setAdminAuthorized(false);
+
+    const auto add = admin.addTrain(e.db.trains[0]);
+    CHECK(!add.ok);
+    CHECK_CONTAINS(add.message, "Admin access required.");
+
+    const auto modify = admin.modifyTrain(12627, e.db.trains[0]);
+    CHECK(!modify.ok);
+    CHECK_CONTAINS(modify.message, "Admin access required.");
+
+    const auto deactivate = admin.deactivateTrain(12627);
+    CHECK(!deactivate.ok);
+    CHECK_CONTAINS(deactivate.message, "Admin access required.");
+
+    const auto fare = admin.updateClassFareAndQuota(12627, "SL", 600, 4, 2, 2);
+    CHECK(!fare.ok);
+    CHECK_CONTAINS(fare.message, "Admin access required.");
+
+    CHECK(e.db.trains[0].active);
+    CHECK_EQ(e.db.trains[0].classes[0].fare, 500);
+}
