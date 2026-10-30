@@ -1,4 +1,3 @@
-
 #include "rrs/admin.h"
 
 #include <algorithm>
@@ -10,6 +9,8 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "rrs/util.h"
 
@@ -300,4 +301,45 @@ AdminResult AdminService::updateClassFareAndQuota(
     return loggedSuccess("Fare and quotas updated successfully.", "UPDATE_FARE_QUOTA", std::to_string(trainNumber) + ":" + requestedCode);
 }
 
+std::vector<TrainDateReport> AdminService::generateReports() const {
+    std::map<std::pair<int, std::string>, TrainDateReport> reports;
+
+    for (const auto& ticket : db_.tickets) {
+        auto key = std::make_pair(ticket.trainNumber, ticket.journeyDate);
+
+        auto& report = reports[key];
+        report.trainNumber = ticket.trainNumber;
+        report.journeyDate = ticket.journeyDate;
+
+        switch (ticket.status) {
+            case Status::Confirmed:
+                ++report.confirmedCount;
+                break;
+
+            case Status::RAC:
+                ++report.racCount;
+                break;
+
+            case Status::Waitlist:
+                ++report.waitlistCount;
+                break;
+
+            case Status::Cancelled:
+                ++report.cancelledCount;
+                break;
+        }
+
+        if (ticket.status != Status::Cancelled) {
+            report.revenue += ticket.totalFare - ticket.refundAmount;
+        }
+    }
+
+    std::vector<TrainDateReport> result;
+
+    for (const auto& entry : reports) {
+        result.push_back(entry.second);
+    }
+
+    return result;
+}
 }  // namespace rrs
