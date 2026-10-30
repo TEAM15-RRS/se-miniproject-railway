@@ -162,6 +162,7 @@ struct App {
             if (loggedInUser) {
                 user = loggedInUser->username;
                 admin = adminLogin;
+                adminService.setAdminUser(user);
             }
         }
     }
