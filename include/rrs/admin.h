@@ -18,6 +18,8 @@ public:
     explicit AdminService(Database& db, Clock clock = {})
         : db_(db), clock_(std::move(clock)) {}
 
+    void setAdminAuthorized(bool authorized) { adminAuthorized_ = authorized; }
+
     AdminResult addTrain(const Train& train);
     AdminResult modifyTrain(int trainNumber, const Train& updatedTrain);
     AdminResult deactivateTrain(int trainNumber);
@@ -34,6 +36,7 @@ public:
 private:
     Database& db_;
     Clock clock_;
+    bool adminAuthorized_ = true;
 };
 
 }  // namespace rrs
