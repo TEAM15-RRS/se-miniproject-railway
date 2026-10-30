@@ -2,6 +2,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "rrs/types.h"
 
@@ -14,14 +15,25 @@ struct AdminResult {
 
 class AdminService {
 public:
-    explicit AdminService(Database& db) : db_(db) {}
+    explicit AdminService(Database& db, Clock clock = {})
+        : db_(db), clock_(std::move(clock)) {}
 
     AdminResult addTrain(const Train& train);
     AdminResult modifyTrain(int trainNumber, const Train& updatedTrain);
     AdminResult deactivateTrain(int trainNumber);
 
+    AdminResult updateClassFareAndQuota(
+        int trainNumber,
+        const std::string& classCode,
+        int fare,
+        int totalSeats,
+        int racSeats,
+        int wlLimit
+    );
+
 private:
     Database& db_;
+    Clock clock_;
 };
 
 }  // namespace rrs
