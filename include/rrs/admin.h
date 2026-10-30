@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <string>
@@ -15,8 +14,20 @@ struct AdminResult {
 
 class AdminService {
 public:
-    explicit AdminService(Database& db, Clock clock = {})
-        : db_(db), clock_(std::move(clock)) {}
+    explicit AdminService(
+        Database& db,
+        Clock clock = {},
+        std::string adminUser = "admin",
+        std::string logPath = "admin_log.txt"
+    )
+        : db_(db),
+          clock_(std::move(clock)),
+          adminUser_(std::move(adminUser)),
+          logPath_(std::move(logPath)) {}
+
+    void setAdminUser(const std::string& username) {
+        adminUser_ = username;
+    }
 
     AdminResult addTrain(const Train& train);
     AdminResult modifyTrain(int trainNumber, const Train& updatedTrain);
@@ -32,8 +43,17 @@ public:
     );
 
 private:
+    bool logAction(const std::string& action, const std::string& target);
+    AdminResult loggedSuccess(
+        const std::string& successMessage,
+        const std::string& action,
+        const std::string& target
+    );
+
     Database& db_;
     Clock clock_;
+    std::string adminUser_;
+    std::string logPath_;
 };
 
 }  // namespace rrs
