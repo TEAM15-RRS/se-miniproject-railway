@@ -1,3 +1,5 @@
+#include "rrs/admin.h"
+
 #include <algorithm>
 #include <array>
 #include <map>
