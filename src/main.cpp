@@ -1,13 +1,16 @@
-// Railway Reservation System - console front-end (Sprint 1).
+
+#include <cctype>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 
+#include "rrs/admin.h"
 #include "rrs/auth.h"
 #include "rrs/booking.h"
 #include "rrs/cancel.h"
 #include "rrs/search.h"
 #include "rrs/storage.h"
+#include "rrs/types.h"
 #include "rrs/util.h"
 
 #ifdef _WIN32
@@ -21,184 +24,458 @@ using namespace rrs;
 
 struct EofExit {};
 
-static std::string ask(const std::string& p) {
-    std::cout << p << std::flush;
-    std::string s;
-    if (!std::getline(std::cin, s)) throw EofExit{};
-    return trim(s);
+static std::string ask(const std::string& prompt) {
+    std::cout << prompt << std::flush;
+
+    std::string value;
+    if (!std::getline(std::cin, value)) {
+        throw EofExit{};
+    }
+
+    return trim(value);
 }
 
-// Masked input for passwords / card numbers (RRS-SR-002)
-static std::string askMasked(const std::string& p) {
-    std::cout << p << std::flush;
-    std::string s;
+static std::string askMasked(const std::string& prompt) {
+    std::cout << prompt << std::flush;
+    std::string value;
+
 #ifdef _WIN32
     int c;
+
     while ((c = _getch()) != '\r' && c != '\n') {
-        if (c == 8) { if (!s.empty()) { s.pop_back(); std::cout << "\b \b"; } }
-        else { s.push_back(static_cast<char>(c)); std::cout << '*'; }
+        if (c == 8) {
+            if (!value.empty()) {
+                value.pop_back();
+                std::cout << "\b \b";
+            }
+        } else if (c == 3) {
+            throw EofExit{};
+        } else {
+            value.push_back(static_cast<char>(c));
+            std::cout << '*';
+        }
     }
-    std::cout << "\n";
+
+    std::cout << '\n';
 #else
     if (isatty(STDIN_FILENO)) {
-        termios oldt{}, newt{};
-        tcgetattr(STDIN_FILENO, &oldt);
-        newt = oldt;
-        newt.c_lflag &= ~static_cast<tcflag_t>(ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-        bool ok = static_cast<bool>(std::getline(std::cin, s));
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        std::cout << "\n";
-        if (!ok) throw EofExit{};
-    } else if (!std::getline(std::cin, s)) throw EofExit{};
+        termios oldSettings{}, newSettings{};
+        tcgetattr(STDIN_FILENO, &oldSettings);
+
+        newSettings = oldSettings;
+        newSettings.c_lflag &= ~static_cast<tcflag_t>(ECHO);
+
+        tcsetattr(STDIN_FILENO, TCSANOW, &newSettings);
+
+        const bool ok = static_cast<bool>(
+            std::getline(std::cin, value)
+        );
+
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldSettings);
+        std::cout << '\n';
+
+        if (!ok) {
+            throw EofExit{};
+        }
+    } else if (!std::getline(std::cin, value)) {
+        throw EofExit{};
+    }
 #endif
-    return trim(s);
+
+    return trim(value);
 }
 
-static int askInt(const std::string& p, int def = -1) {
-    std::string s = ask(p);
-    try { size_t pos; int v = std::stoi(s, &pos); if (pos == s.size()) return v; } catch (...) {}
-    return def;
+static int askInt(const std::string& prompt, int defaultValue = -1) {
+    const std::string value = ask(prompt);
+
+    try {
+        std::size_t position = 0;
+        const int result = std::stoi(value, &position);
+
+        if (position == value.size()) {
+            return result;
+        }
+    } catch (...) {
+    }
+
+    return defaultValue;
 }
 
 struct App {
     Database db;
     Storage storage;
     Clock clock = [] { return currentMinutes(); };
+
     AuthService auth;
+    AdminService adminService;
     PaymentService pay;
     BookingService booking;
     CancelService cancelSvc;
     SearchService search;
-    std::string user;  // logged-in username
+
+    std::string user;
     bool admin = false;
 
-    explicit App(const std::string& dir)
-        : storage(dir), auth(db, clock), booking(db, pay, clock), cancelSvc(db, clock), search(db, clock) {}
+    explicit App(const std::string& directory)
+        : storage(directory),
+          auth(db, clock),
+          adminService(db, clock),
+          booking(db, pay, clock),
+          cancelSvc(db, clock),
+          search(db, clock) {}
 
     void persist() {
-        std::string err;
-        if (!storage.save(db, &err)) std::cout << "WARNING: could not save data: " << err << "\n";
+        std::string error;
+
+        if (!storage.save(db, &error)) {
+            std::cout << "WARNING: could not save data: "
+                      << error << '\n';
+        }
     }
 
     void doRegister() {
-        std::string u = ask("Choose username: ");
-        std::string p = askMasked("Choose password: ");
-        auto r = auth.registerUser(u, p);
-        std::cout << r.message << "\n";
-        if (r.ok) persist();
+        const std::string username = ask("Choose username: ");
+        const std::string password = askMasked("Choose password: ");
+
+        const auto result = auth.registerUser(username, password);
+        std::cout << result.message << '\n';
+
+        if (result.ok) {
+            persist();
+        }
     }
 
     void doLogin(bool adminLogin) {
-        std::string u = ask("Username: ");
-        std::string p = askMasked("Password: ");
-        auto r = auth.login(u, p, adminLogin);
-        std::cout << r.message << "\n";
-        persist();  // failed-attempt counters are persisted too
-        if (r.ok) { user = findUser(db, u)->username; admin = adminLogin; }
+        const std::string username = ask("Username: ");
+        const std::string password = askMasked("Password: ");
+
+        const auto result = auth.login(
+            username, password, adminLogin
+        );
+
+        std::cout << result.message << '\n';
+        persist();
+
+        if (result.ok) {
+            const User* loggedInUser = findUser(db, username);
+
+            if (loggedInUser) {
+                user = loggedInUser->username;
+                admin = adminLogin;
+            }
+        }
     }
 
     void doSearch() {
-        SearchQuery q{ask("From: "), ask("To: "), ask("Date (YYYY-MM-DD): "), ask("Class (blank = all): ")};
-        auto r = search.search(q);
-        if (!r.ok || r.rows.empty()) { std::cout << r.message << "\n"; return; }
-        std::cout << std::left << std::setw(7) << "Train" << std::setw(22) << "Name" << std::setw(7) << "Dep"
-                  << std::setw(6) << "Cls" << std::setw(8) << "Fare" << "Availability\n";
-        for (const auto& w : r.rows)
-            std::cout << std::setw(7) << w.trainNumber << std::setw(22) << w.trainName << std::setw(7)
-                      << w.departure << std::setw(6) << w.classCode << std::setw(8) << w.fare
-                      << w.availability << "\n";
+        SearchQuery query{
+            ask("From: "),
+            ask("To: "),
+            ask("Date (YYYY-MM-DD): "),
+            ask("Class (blank = all): ")
+        };
+
+        const auto result = search.search(query);
+
+        if (!result.ok || result.rows.empty()) {
+            std::cout << result.message << '\n';
+            return;
+        }
+
+        std::cout << std::left
+                  << std::setw(7) << "Train"
+                  << std::setw(22) << "Name"
+                  << std::setw(7) << "Dep"
+                  << std::setw(6) << "Cls"
+                  << std::setw(8) << "Fare"
+                  << "Availability\n";
+
+        for (const auto& row : result.rows) {
+            std::cout << std::setw(7) << row.trainNumber
+                      << std::setw(22) << row.trainName
+                      << std::setw(7) << row.departure
+                      << std::setw(6) << row.classCode
+                      << std::setw(8) << row.fare
+                      << row.availability << '\n';
+        }
     }
 
     void doBook() {
-        BookingRequest req;
-        req.username = user;
-        req.trainNumber = askInt("Train number: ");
-        req.classCode = ask("Class: ");
-        req.journeyDate = ask("Date (YYYY-MM-DD): ");
-        int n = askInt("Number of passengers (1-" + std::to_string(kMaxPassengersPerBooking) + "): ", 0);
-        for (int i = 1; i <= n && i <= kMaxPassengersPerBooking; ++i) {
-            Passenger p;
-            p.name = ask("  Passenger " + std::to_string(i) + " name: ");
-            p.age = askInt("  Age: ");
-            std::string g = ask("  Gender (M/F/O): ");
-            p.gender = g.empty() ? '?' : static_cast<char>(std::toupper(static_cast<unsigned char>(g[0])));
-            req.passengers.push_back(p);
+        BookingRequest request;
+        request.username = user;
+        request.trainNumber = askInt("Train number: ");
+        request.classCode = ask("Class: ");
+        request.journeyDate = ask("Date (YYYY-MM-DD): ");
+
+        const int passengerCount = askInt(
+            "Number of passengers (1-" +
+            std::to_string(kMaxPassengersPerBooking) + "): ",
+            0
+        );
+
+        for (int i = 1;
+             i <= passengerCount && i <= kMaxPassengersPerBooking;
+             ++i) {
+            Passenger passenger;
+
+            passenger.name = ask(
+                "  Passenger " + std::to_string(i) + " name: "
+            );
+
+            passenger.age = askInt("  Age: ");
+
+            const std::string gender = ask("  Gender (M/F/O): ");
+
+            passenger.gender = gender.empty()
+                ? '?'
+                : static_cast<char>(
+                    std::toupper(
+                        static_cast<unsigned char>(gender[0])
+                    )
+                );
+
+            request.passengers.push_back(passenger);
         }
-        req.cardNumber = askMasked("Dummy card number (16 digits): ");
-        auto r = booking.book(req);
-        if (!r.ok) { std::cout << "Booking failed: " << r.message << "\n"; return; }
+
+        request.cardNumber = askMasked(
+            "Dummy card number (16 digits): "
+        );
+
+        const auto result = booking.book(request);
+
+        if (!result.ok) {
+            std::cout << "Booking failed: "
+                      << result.message << '\n';
+            return;
+        }
+
         persist();
-        std::cout << r.message << "\n" << formatReceipt(db, r.ticket, r.txnId, PaymentService::mask(req.cardNumber));
+
+        std::cout << result.message << '\n'
+                  << formatReceipt(
+                      db,
+                      result.ticket,
+                      result.txnId,
+                      PaymentService::mask(request.cardNumber)
+                  );
     }
 
     void doStatus() {
-        const Ticket* t = lookupPnr(db, ask("PNR: "));
-        if (!t) std::cout << "PNR not found.\n";
-        else std::cout << formatReceipt(db, *t);
+        const Ticket* ticket = lookupPnr(db, ask("PNR: "));
+
+        if (!ticket) {
+            std::cout << "PNR not found.\n";
+        } else {
+            std::cout << formatReceipt(db, *ticket);
+        }
     }
 
     void doMyTickets() {
-        auto v = booking.ticketsFor(user);
-        if (v.empty()) std::cout << "No bookings yet.\n";
-        for (const Ticket* t : v)
-            std::cout << t->pnr << "  train " << t->trainNumber << "  " << t->journeyDate << "  "
-                      << t->classCode << "  " << toString(t->status) << "  Rs." << t->totalFare << "\n";
+        const auto tickets = booking.ticketsFor(user);
+
+        if (tickets.empty()) {
+            std::cout << "No bookings yet.\n";
+        }
+
+        for (const Ticket* ticket : tickets) {
+            std::cout << ticket->pnr
+                      << "  train " << ticket->trainNumber
+                      << "  " << ticket->journeyDate
+                      << "  " << ticket->classCode
+                      << "  " << toString(ticket->status)
+                      << "  Rs." << ticket->totalFare << '\n';
+        }
     }
 
     void doCancel() {
-        auto r = cancelSvc.cancel(ask("PNR to cancel: "), user);
-        std::cout << r.message << "\n";
-        for (const auto& p : r.promotedPnrs) std::cout << "  Waiting-list update: PNR " << p << " moved up.\n";
-        if (r.ok) persist();
+        const auto result = cancelSvc.cancel(
+            ask("PNR to cancel: "),
+            user
+        );
+
+        std::cout << result.message << '\n';
+
+        for (const auto& pnr : result.promotedPnrs) {
+            std::cout << "  Waiting-list update: PNR "
+                      << pnr << " moved up.\n";
+        }
+
+        if (result.ok) {
+            persist();
+        }
+    }
+
+    void doUpdateFareAndQuota() {
+        std::cout << "\n--- Current trains and classes ---\n";
+
+        for (const auto& train : db.trains) {
+            std::cout << "\nTrain " << train.number
+                      << " - " << train.name
+                      << (train.active ? " [Active]" : " [Inactive]")
+                      << '\n';
+
+            for (const auto& cls : train.classes) {
+                std::cout << "  Class: " << cls.code
+                          << " | Fare: Rs." << cls.fare
+                          << " | Confirmed seats: " << cls.totalSeats
+                          << " | RAC: " << cls.racSeats
+                          << " | WL limit: " << cls.wlLimit
+                          << '\n';
+            }
+        }
+
+        const int trainNumber = askInt(
+            "\nTrain number to update (0 to cancel): ", -1
+        );
+
+        if (trainNumber == 0) {
+            std::cout << "Update cancelled.\n";
+            return;
+        }
+
+        if (trainNumber < 0) {
+            std::cout << "Invalid train number.\n";
+            return;
+        }
+
+        const std::string classCode = ask("Class code: ");
+
+        const int fare = askInt("New fare (Rs.): ", -1);
+        const int totalSeats = askInt(
+            "New confirmed-seat quota: ", -1
+        );
+        const int racSeats = askInt("New RAC quota: ", -1);
+        const int wlLimit = askInt("New waitlist limit: ", -1);
+
+        const auto result = adminService.updateClassFareAndQuota(
+            trainNumber,
+            classCode,
+            fare,
+            totalSeats,
+            racSeats,
+            wlLimit
+        );
+
+        std::cout << result.message << '\n';
+
+        if (result.ok) {
+            persist();
+            std::cout << "Updated configuration saved successfully.\n";
+        } else {
+            std::cout << "No changes were applied.\n";
+        }
     }
 
     void guestMenu() {
-        std::cout << "\n--- Railway Reservation System ---\n1. Register\n2. Passenger login\n3. Admin login\n"
-                     "4. Search trains\n5. PNR status\n0. Exit\n";
+        std::cout << "\n--- Railway Reservation System ---\n"
+                     "1. Register\n"
+                     "2. Passenger login\n"
+                     "3. Admin login\n"
+                     "4. Search trains\n"
+                     "5. PNR status\n"
+                     "0. Exit\n";
+
         switch (askInt("Choice: ")) {
-            case 1: doRegister(); break;
-            case 2: doLogin(false); break;
-            case 3: doLogin(true); break;
-            case 4: doSearch(); break;
-            case 5: doStatus(); break;
-            case 0: throw EofExit{};
-            default: std::cout << "Please enter a number from the menu.\n";
+            case 1:
+                doRegister();
+                break;
+            case 2:
+                doLogin(false);
+                break;
+            case 3:
+                doLogin(true);
+                break;
+            case 4:
+                doSearch();
+                break;
+            case 5:
+                doStatus();
+                break;
+            case 0:
+                throw EofExit{};
+            default:
+                std::cout << "Please enter a number from the menu.\n";
         }
     }
 
     void passengerMenu() {
-        std::cout << "\n--- Welcome, " << user << " ---\n1. Search trains\n2. Book ticket\n3. My bookings\n"
-                     "4. Cancel ticket\n5. PNR status\n0. Logout\n";
+        std::cout << "\n--- Welcome, " << user << " ---\n"
+                     "1. Search trains\n"
+                     "2. Book ticket\n"
+                     "3. My bookings\n"
+                     "4. Cancel ticket\n"
+                     "5. PNR status\n"
+                     "0. Logout\n";
+
         switch (askInt("Choice: ")) {
-            case 1: doSearch(); break;
-            case 2: doBook(); break;
-            case 3: doMyTickets(); break;
-            case 4: doCancel(); break;
-            case 5: doStatus(); break;
-            case 0: user.clear(); break;
-            default: std::cout << "Please enter a number from the menu.\n";
+            case 1:
+                doSearch();
+                break;
+            case 2:
+                doBook();
+                break;
+            case 3:
+                doMyTickets();
+                break;
+            case 4:
+                doCancel();
+                break;
+            case 5:
+                doStatus();
+                break;
+            case 0:
+                user.clear();
+                break;
+            default:
+                std::cout << "Please enter a number from the menu.\n";
         }
     }
 
     void adminMenu() {
         std::cout << "\n--- Admin console (" << user << ") ---\n"
-                     "Train/fare/quota management and reports arrive in Sprint 2.\n0. Logout\n";
-        if (askInt("Choice: ") == 0) { user.clear(); admin = false; }
+                     "1. View and update class fare/quota\n"
+                     "0. Logout\n";
+
+        switch (askInt("Choice: ")) {
+            case 1:
+                doUpdateFareAndQuota();
+                break;
+            case 0:
+                user.clear();
+                admin = false;
+                break;
+            default:
+                std::cout << "Please enter a number from the menu.\n";
+        }
     }
 
     void run() {
-        LoadReport rep;
-        storage.load(db, &rep);
-        if (rep.skippedLines) std::cout << "Note: " << rep.skippedLines << " corrupt record(s) were skipped.\n";
-        if (db.trains.empty() || !findUser(db, "admin")) { seedDatabase(db); persist(); }
+        LoadReport report;
+        storage.load(db, &report);
+
+        if (report.skippedLines) {
+            std::cout << "Note: " << report.skippedLines
+                      << " corrupt record(s) were skipped.\n";
+        }
+
+        if (db.trains.empty() || !findUser(db, "admin")) {
+            seedDatabase(db);
+            persist();
+        }
+
         try {
             while (true) {
-                if (user.empty()) guestMenu();
-                else if (admin) adminMenu();
-                else passengerMenu();
+                if (user.empty()) {
+                    guestMenu();
+                } else if (admin) {
+                    adminMenu();
+                } else {
+                    passengerMenu();
+                }
             }
-        } catch (const EofExit&) { std::cout << "\nGoodbye.\n"; }
+        } catch (const EofExit&) {
+            std::cout << "\nGoodbye.\n";
+        }
+
         persist();
     }
 };
