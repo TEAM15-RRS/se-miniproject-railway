@@ -3,6 +3,10 @@
 
 #include <algorithm>
 #include <array>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <map>
 #include <set>
 #include <string>
@@ -56,6 +60,37 @@ bool validTrain(const Train& train) {
 
 }  // namespace
 
+bool AdminService::logAction(const std::string& action,
+                             const std::string& target) {
+    std::ofstream log(logPath_, std::ios::app);
+    if (!log) {
+        return false;
+    }
+
+    const std::time_t now = clock_ ? clock_() : std::time(nullptr);
+    std::tm timestamp{};
+#if defined(_WIN32)
+    localtime_s(&timestamp, &now);
+#else
+    localtime_r(&now, &timestamp);
+#endif
+
+    log << std::put_time(&timestamp, "%Y-%m-%d %H:%M:%S")
+        << " | admin=" << adminUser_
+        << " | action=" << action
+        << " | target=" << target << '\n';
+    return static_cast<bool>(log);
+}
+
+AdminResult AdminService::loggedSuccess(const std::string& successMessage,
+                                        const std::string& action,
+                                        const std::string& target) {
+    if (!logAction(action, target)) {
+        return {false, "Action completed, but the admin log could not be written."};
+    }
+    return {true, successMessage};
+}
+
 AdminResult AdminService::addTrain(const Train& train) {
     if (!adminAuthorized_) return {false, "Admin access required."};
     if (!validTrain(train)) {
@@ -86,7 +121,7 @@ AdminResult AdminService::addTrain(const Train& train) {
 
     db_.trains.push_back(newTrain);
 
-    return {true, "Train added successfully."};
+    return loggedSuccess("Train added successfully.", "ADD_TRAIN", std::to_string(train.number));
 }
 
 AdminResult AdminService::modifyTrain(
@@ -126,7 +161,7 @@ AdminResult AdminService::modifyTrain(
 
     *existing = replacement;
 
-    return {true, "Train updated successfully."};
+    return loggedSuccess("Train updated successfully.", "MODIFY_TRAIN", std::to_string(trainNumber));
 }
 
 AdminResult AdminService::deactivateTrain(int trainNumber) {
@@ -149,7 +184,7 @@ AdminResult AdminService::deactivateTrain(int trainNumber) {
 
     existing->active = false;
 
-    return {true, "Train deactivated successfully."};
+    return loggedSuccess("Train deactivated successfully.", "DEACTIVATE_TRAIN", std::to_string(trainNumber));
 }
 
 AdminResult AdminService::updateClassFareAndQuota(
@@ -266,7 +301,7 @@ AdminResult AdminService::updateClassFareAndQuota(
     classIt->racSeats = racSeats;
     classIt->wlLimit = wlLimit;
 
-    return {true, "Fare and quotas updated successfully."};
+    return loggedSuccess("Fare and quotas updated successfully.", "UPDATE_FARE_QUOTA", std::to_string(trainNumber) + ":" + requestedCode);
 }
 
 }  // namespace rrs

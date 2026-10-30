@@ -1,3 +1,6 @@
+#include <fstream>
+#include <filesystem>
+#include <string>
 
 #include "test_helpers.h"
 #include "rrs/admin.h"
@@ -328,4 +331,77 @@ TEST(TC_AdminAccess_RejectsPassengerActions) {
 
     CHECK(e.db.trains[0].active);
     CHECK_EQ(e.db.trains[0].classes[0].fare, 500);
+}
+
+TEST(TC_AdminLog_01_AddTrainIsLogged) {
+    Env e;
+    const auto dir = freshTempDir("admin_log");
+    const auto path = dir + "/admin_log.txt";
+    AdminService admin(e.db, {}, "test_admin", path);
+
+    Train train;
+    train.number = 22691;
+    train.name = "Rajdhani Express";
+    train.source = "Bengaluru";
+    train.destination = "New Delhi";
+    train.departure = "20:00";
+    train.classes = {{"3A", 60, 6, 12, 2760}};
+
+    const auto result = admin.addTrain(train);
+    CHECK(result.ok);
+
+    std::ifstream input(path);
+    const std::string contents(
+        (std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+
+    CHECK_CONTAINS(contents, "test_admin");
+    CHECK_CONTAINS(contents, "ADD_TRAIN");
+    CHECK_CONTAINS(contents, "22691");
+}
+
+TEST(TC_AdminLog_02_LogAppendsActions) {
+    Env e;
+    const auto dir = freshTempDir("admin_log_append");
+    const auto path = dir + "/admin_log.txt";
+    AdminService admin(e.db, {}, "test_admin", path);
+
+    Train train;
+    train.number = 22691;
+    train.name = "Rajdhani Express";
+    train.source = "Bengaluru";
+    train.destination = "New Delhi";
+    train.departure = "20:00";
+    train.classes = {{"3A", 60, 6, 12, 2760}};
+
+    CHECK(admin.addTrain(train).ok);
+    CHECK(admin.deactivateTrain(22691).ok);
+
+    std::ifstream input(path);
+    std::string line;
+    int lines = 0;
+    while (std::getline(input, line)) {
+        ++lines;
+    }
+    CHECK_EQ(lines, 2);
+}
+
+TEST(TC_AdminLog_03_UnwritableLogPathIsReported) {
+    Env e;
+    const auto dir = freshTempDir("admin_log_unwritable");
+    const auto path = dir + "/missing/admin_log.txt";
+    AdminService admin(e.db, {}, "test_admin", path);
+
+    Train train;
+    train.number = 22691;
+    train.name = "Rajdhani Express";
+    train.source = "Bengaluru";
+    train.destination = "New Delhi";
+    train.departure = "20:00";
+    train.classes = {{"3A", 60, 6, 12, 2760}};
+
+    const auto result = admin.addTrain(train);
+    CHECK(!result.ok);
+}
+
 }

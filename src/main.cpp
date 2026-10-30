@@ -163,6 +163,7 @@ struct App {
                 user = loggedInUser->username;
                 admin = adminLogin;
                 adminService.setAdminAuthorized(adminLogin);
+                adminService.setAdminUser(user);
             }
         }
     }
