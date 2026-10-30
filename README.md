@@ -1,3 +1,5 @@
+[![CI](https://github.com/TEAM15-RRS/se-miniproject-railway/actions/workflows/ci.yml/badge.svg)](https://github.com/TEAM15-RRS/se-miniproject-railway/actions/workflows/ci.yml)
+
 # Railway Reservation System (Booking & Cancellation)
 
 Software Engineering Mini Project - **Team 15** · C++17 console application

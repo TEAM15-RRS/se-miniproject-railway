@@ -2,6 +2,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "rrs/types.h"
 
@@ -10,6 +11,18 @@ namespace rrs {
 struct AdminResult {
     bool ok = false;
     std::string message;
+};
+
+struct TrainDateReport {
+    int trainNumber = 0;
+    std::string journeyDate;
+
+    int confirmedCount = 0;
+    int racCount = 0;
+    int waitlistCount = 0;
+    int cancelledCount = 0;
+
+    int revenue = 0;
 };
 
 class AdminService {
@@ -43,6 +56,7 @@ public:
         int racSeats,
         int wlLimit
     );
+    std::vector<TrainDateReport> generateReports() const;
 
  private:
    bool logAction(const std::string& action, const std::string& target);
