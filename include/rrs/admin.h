@@ -59,7 +59,7 @@ public:
     std::vector<TrainDateReport> generateReports() const;
 
  private:
-   bool logAction(const std::string& action, const std::string& target);
+    bool logAction(const std::string& action, const std::string& target);
     AdminResult loggedSuccess(
         const std::string& successMessage,
         const std::string& action,
