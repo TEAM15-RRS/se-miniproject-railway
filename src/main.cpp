@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <iomanip>
@@ -24,6 +25,8 @@ using namespace rrs;
 
 struct EofExit {};
 
+struct AddTrainCancelled {};
+
 static std::string ask(const std::string& prompt) {
     std::cout << prompt << std::flush;
 
@@ -33,6 +36,22 @@ static std::string ask(const std::string& prompt) {
     }
 
     return trim(value);
+}
+
+static std::string askAddTrain(const std::string& prompt) {
+    std::string value = ask(prompt);
+
+    std::string command = value;
+    std::transform(command.begin(), command.end(), command.begin(),
+                   [](unsigned char c) {
+                       return static_cast<char>(std::toupper(c));
+                   });
+
+    if (command == "CNCL") {
+        throw AddTrainCancelled{};
+    }
+
+    return value;
 }
 
 static std::string askMasked(const std::string& prompt) {
@@ -99,6 +118,110 @@ static int askInt(const std::string& prompt, int defaultValue = -1) {
     }
 
     return defaultValue;
+}
+
+static int askIntRange(
+    const std::string& prompt,
+    int minValue,
+    int maxValue
+) {
+    while (true) {
+        const std::string value = ask(prompt);
+
+        try {
+            std::size_t position = 0;
+            const int result = std::stoi(value, &position);
+
+            if (position == value.size() &&
+                result >= minValue &&
+                result <= maxValue) {
+                return result;
+            }
+        } catch (...) {
+        }
+
+        std::cout << "Invalid input. Enter a number between "
+                  << minValue << " and " << maxValue << ".\n";
+    }
+}
+
+static int askAddTrainIntRange(
+    const std::string& prompt,
+    int minValue,
+    int maxValue
+) {
+    while (true) {
+        const std::string value = askAddTrain(prompt);
+
+        try {
+            std::size_t position = 0;
+            const int result = std::stoi(value, &position);
+
+            if (position == value.size() &&
+                result >= minValue &&
+                result <= maxValue) {
+                return result;
+            }
+        } catch (...) {
+        }
+
+        std::cout << "Invalid input. Enter a number between "
+                  << minValue << " and " << maxValue << ".\n";
+    }
+}
+
+static std::string askNonEmpty(const std::string& prompt) {
+    while (true) {
+        const std::string value = ask(prompt);
+
+        if (!value.empty()) {
+            return value;
+        }
+
+        std::cout << "Input cannot be empty. Please try again.\n";
+    }
+}
+
+static std::string askAddTrainNonEmpty(const std::string& prompt) {
+    while (true) {
+        const std::string value = askAddTrain(prompt);
+
+        if (!value.empty()) {
+            return value;
+        }
+
+        std::cout << "Input cannot be empty. Please try again.\n";
+    }
+}
+
+static std::string askAddTrainTime(const std::string& prompt) {
+    while (true) {
+        const std::string value = askAddTrainNonEmpty(prompt);
+
+        int hour = 0;
+        int minute = 0;
+
+        if (parseTime(value, hour, minute)) {
+            return value;
+        }
+
+        std::cout << "Invalid time. Use HH:MM format (00:00-23:59).\n";
+    }
+}
+
+static std::string askTime(const std::string& prompt) {
+    while (true) {
+        const std::string value = askNonEmpty(prompt);
+
+        int hour = 0;
+        int minute = 0;
+
+        if (parseTime(value, hour, minute)) {
+            return value;
+        }
+
+        std::cout << "Invalid time. Use HH:MM format (00:00-23:59).\n";
+    }
 }
 
 struct App {
@@ -305,6 +428,197 @@ struct App {
         }
     }
 
+    void doListTrains() const {
+        std::cout << "\n--- Train List ---\n";
+
+        if (db.trains.empty()) {
+            std::cout << "No trains found.\n";
+            return;
+        }
+
+        for (const auto& train : db.trains) {
+            std::cout << "\nTrain number: " << train.number
+                      << "\nName: " << train.name
+                      << "\nRoute: " << train.source
+                      << " -> " << train.destination
+                      << "\nDeparture: " << train.departure
+                      << "\nStatus: "
+                      << (train.active ? "Active" : "Inactive")
+                      << "\nClasses:\n";
+
+            for (const auto& cls : train.classes) {
+                std::cout << "  " << cls.code
+                          << " | Fare: Rs." << cls.fare
+                          << " | Seats: " << cls.totalSeats
+                          << " | RAC: " << cls.racSeats
+                          << " | WL: " << cls.wlLimit
+                          << '\n';
+            }
+        }
+    }
+
+    void doAddTrain() {
+        try {
+            Train train;
+
+            std::cout << "\n--- Add Train ---\n";
+            std::cout << "Enter CNCL at any prompt to cancel.\n";
+
+            train.number = askAddTrainIntRange("Train number: ", 1, 999999);
+            train.name = askAddTrainNonEmpty("Train name: ");
+            train.source = askAddTrainNonEmpty("Source station: ");
+            train.destination = askAddTrainNonEmpty("Destination station: ");
+            train.departure = askAddTrainTime("Departure time (HH:MM): ");
+
+            const int classCount = askAddTrainIntRange(
+                "Number of classes (1-10): ", 1, 10
+            );
+
+            for (int i = 0; i < classCount; ++i) {
+                ClassInfo cls;
+
+                std::cout << "\nClass " << i + 1 << '\n';
+
+                while (true) {
+                    cls.code = askAddTrainNonEmpty(
+                        "Class code (SL/3A/2A/CC/EC): "
+                    );
+
+                    std::transform(
+                        cls.code.begin(),
+                        cls.code.end(),
+                        cls.code.begin(),
+                        [](unsigned char c) {
+                            return static_cast<char>(std::toupper(c));
+                        }
+                    );
+
+                    const bool validCode =
+                        cls.code == "SL" ||
+                        cls.code == "3A" ||
+                        cls.code == "2A" ||
+                        cls.code == "CC" ||
+                        cls.code == "EC";
+
+                    const bool duplicate = std::any_of(
+                        train.classes.begin(),
+                        train.classes.end(),
+                        [&](const ClassInfo& existing) {
+                            return existing.code == cls.code;
+                        }
+                    );
+
+                    if (validCode && !duplicate) {
+                        break;
+                    }
+
+                    if (!validCode) {
+                        std::cout << "Invalid class code. Choose SL, 3A, 2A, CC, or EC.\n";
+                    } else {
+                        std::cout << "This class has already been added. Choose another.\n";
+                    }
+                }
+
+                cls.fare = askAddTrainIntRange("Fare (Rs.): ", 1, 1000000);
+                cls.totalSeats = askAddTrainIntRange(
+                    "Confirmed-seat quota: ", 1, 100000
+                );
+                cls.racSeats = askAddTrainIntRange(
+                    "RAC quota: ", 0, 100000
+                );
+                cls.wlLimit = askAddTrainIntRange(
+                    "Waitlist limit: ", 0, 100000
+                );
+
+                train.classes.push_back(cls);
+            }
+
+            const auto result = adminService.addTrain(train);
+
+            std::cout << result.message << '\n';
+
+            if (result.ok) {
+                persist();
+                std::cout << "Train added and saved successfully.\n";
+            }
+        } catch (const AddTrainCancelled&) {
+            std::cout << "\nAdd Train cancelled. No changes saved.\n";
+        }
+    }
+
+    void doModifyTrain() {
+        std::cout << "\n--- Modify Train ---\n";
+
+        const int trainNumber = askIntRange(
+            "Train number to modify (0 to cancel): ", 0, 999999
+        );
+
+        if (trainNumber == 0) {
+            std::cout << "Modification cancelled.\n";
+            return;
+        }
+
+        const Train* existing = findTrain(db, trainNumber);
+
+        if (!existing) {
+            std::cout << "Train not found.\n";
+            return;
+        }
+
+        Train updated = *existing;
+
+        std::cout << "Enter updated train details:\n";
+
+        updated.name = askNonEmpty("Train name: ");
+        updated.source = askNonEmpty("Source station: ");
+        updated.destination = askNonEmpty("Destination station: ");
+        updated.departure = askTime("Departure time (HH:MM): ");
+
+        const auto result = adminService.modifyTrain(
+            trainNumber,
+            updated
+        );
+
+        std::cout << result.message << '\n';
+
+        if (result.ok) {
+            persist();
+            std::cout << "Train updated and saved successfully.\n";
+        }
+    }
+
+    void doDeactivateTrain() {
+        std::cout << "\n--- Deactivate Train ---\n";
+
+        const int trainNumber = askIntRange(
+            "Train number to deactivate (0 to cancel): ", 0, 999999
+        );
+
+        if (trainNumber == 0) {
+            std::cout << "Deactivation cancelled.\n";
+            return;
+        }
+
+        const std::string confirmation = ask(
+            "Deactivate train " + std::to_string(trainNumber) +
+            "? Type YES to confirm: "
+        );
+
+        if (confirmation != "YES") {
+            std::cout << "Deactivation cancelled.\n";
+            return;
+        }
+
+        const auto result = adminService.deactivateTrain(trainNumber);
+
+        std::cout << result.message << '\n';
+
+        if (result.ok) {
+            persist();
+            std::cout << "Train deactivated and saved successfully.\n";
+        }
+    }
+
     void doUpdateFareAndQuota() {
         std::cout << "\n--- Current trains and classes ---\n";
 
@@ -324,8 +638,8 @@ struct App {
             }
         }
 
-        const int trainNumber = askInt(
-            "\nTrain number to update (0 to cancel): ", -1
+        const int trainNumber = askIntRange(
+            "\nTrain number to update (0 to cancel): ", 0, 999999
         );
 
         if (trainNumber == 0) {
@@ -333,19 +647,14 @@ struct App {
             return;
         }
 
-        if (trainNumber < 0) {
-            std::cout << "Invalid train number.\n";
-            return;
-        }
+        const std::string classCode = askNonEmpty("Class code: ");
 
-        const std::string classCode = ask("Class code: ");
-
-        const int fare = askInt("New fare (Rs.): ", -1);
-        const int totalSeats = askInt(
-            "New confirmed-seat quota: ", -1
+        const int fare = askIntRange("New fare (Rs.): ", 1, 1000000);
+        const int totalSeats = askIntRange(
+            "New confirmed-seat quota: ", 1, 100000
         );
-        const int racSeats = askInt("New RAC quota: ", -1);
-        const int wlLimit = askInt("New waitlist limit: ", -1);
+        const int racSeats = askIntRange("New RAC quota: ", 0, 100000);
+        const int wlLimit = askIntRange("New waitlist limit: ", 0, 100000);
 
         const auto result = adminService.updateClassFareAndQuota(
             trainNumber,
@@ -363,6 +672,76 @@ struct App {
             std::cout << "Updated configuration saved successfully.\n";
         } else {
             std::cout << "No changes were applied.\n";
+        }
+    }
+
+    void doCreateBackup() {
+        std::string error;
+
+        // Save the latest in-memory data before creating the backup.
+        if (!storage.save(db, &error)) {
+            std::cout << "Backup failed: could not save current data: "
+                      << error << '\n';
+            return;
+        }
+
+        std::string backupPath;
+
+        if (!storage.createBackup(backupPath, &error)) {
+            std::cout << "Backup failed: " << error << '\n';
+            return;
+        }
+
+        std::cout << "Backup created successfully.\n"
+                  << "Location: " << backupPath << '\n';
+    }
+
+    void doRestoreBackup() {
+        const std::string backupPath = askNonEmpty(
+            "Enter backup directory path: "
+        );
+
+        if (backupPath.empty()) {
+            std::cout << "Restore cancelled: path cannot be empty.\n";
+            return;
+        }
+
+        const std::string confirmation = ask(
+            "This will replace current application data. "
+            "Type RESTORE to confirm: "
+        );
+
+        if (confirmation != "RESTORE") {
+            std::cout << "Restore cancelled.\n";
+            return;
+        }
+
+        std::string error;
+
+        if (!storage.restoreBackup(backupPath, &error)) {
+            std::cout << "Restore failed: " << error << '\n';
+            return;
+        }
+
+        LoadReport report;
+
+        if (!storage.load(db, &report)) {
+            user.clear();
+            admin = false;
+            std::cout << "Backup was restored, but reloading application data failed. "
+                        "Please restart the application.\n";
+            return;
+        }
+
+        user.clear();
+        admin = false;
+
+        std::cout << "Backup restored successfully.\n"
+                  << "You have been logged out. Please log in again.\n";
+
+        if (report.skippedLines > 0) {
+            std::cout << "Warning: " << report.skippedLines
+                      << " record(s) were skipped while loading.\n";
         }
     }
 
@@ -433,12 +812,36 @@ struct App {
 
     void adminMenu() {
         std::cout << "\n--- Admin console (" << user << ") ---\n"
-                     "1. View and update class fare/quota\n"
+                     "1. List trains\n"
+                     "2. Add train\n"
+                     "3. Modify train\n"
+                     "4. Deactivate train\n"
+                     "5. Update class fare/quota\n"
+                     "6. Create backup\n"
+                     "7. Restore backup\n"
                      "0. Logout\n";
 
-        switch (askInt("Choice: ")) {
+        switch (askIntRange("Choice: ", 0, 7)) {
             case 1:
+                doListTrains();
+                break;
+            case 2:
+                doAddTrain();
+                break;
+            case 3:
+                doModifyTrain();
+                break;
+            case 4:
+                doDeactivateTrain();
+                break;
+            case 5:
                 doUpdateFareAndQuota();
+                break;
+            case 6:
+                doCreateBackup();
+                break;
+            case 7:
+                doRestoreBackup();
                 break;
             case 0:
                 user.clear();
@@ -448,6 +851,7 @@ struct App {
                 std::cout << "Please enter a number from the menu.\n";
         }
     }
+
 
     void run() {
         LoadReport report;
