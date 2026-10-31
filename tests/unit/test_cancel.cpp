@@ -164,6 +164,7 @@ TEST(TC_Cancel_15_RefundUsesOriginalFareAfterFareChange) {
     auto cancellation = e.cancel.cancel(booking.ticket.pnr, "alice");
 
     CHECK(cancellation.ok);
+   
     CHECK_EQ(cancellation.refund, 750);
     CHECK_EQ(
         lookupPnr(e.db, booking.ticket.pnr)->refundAmount,
@@ -198,6 +199,7 @@ TEST(TC_Cancel_16_RefundAfterTrainDeactivation) {
     auto cancellation = e.cancel.cancel(booking.ticket.pnr, "alice");
 
     CHECK(cancellation.ok);
+    
     CHECK_EQ(cancellation.refund, 750);
 
     const Ticket* cancelledTicket =
