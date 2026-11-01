@@ -33,11 +33,7 @@ final execution totals.
 | Backup/restore | - | No automated test mapping verified | Pending verification |
 | Fuzzing | - | No automated test mapping verified | Pending verification |
 
-**Boundary/error coverage examples:** age 0/1/120/121; passengers 0/6/7;
-username 2/3/20/21 characters; password 7/8/64/65; refund at 48h/47h59,
-12h/11h59, and 4h/3h59; leap-day dates; booking at departure minute versus
-one minute before; corrupt and half-written data files.
-
+**Boundary/error coverage examples:** age 0/1/120/121; passengers 0/6/7; username 2/3/20/21 characters; password 7/8/64/65; refund at 24h/24h+1min, 12h/11h59, and after departure; leap-day dates; booking at departure minute versus one minute before; corrupt and half-written data files.
 
 **Sprint 2 follow-up:** verify execution of the admin tests and admin action
 logging tests; execute and record TC-Perf-01; and confirm implementation and
