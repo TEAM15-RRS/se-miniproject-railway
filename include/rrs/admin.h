@@ -42,6 +42,8 @@ public:
         adminUser_ = username;
     }
 
+    void setAdminAuthorized(bool authorized) { adminAuthorized_ = authorized; }
+
     AdminResult addTrain(const Train& train);
     AdminResult modifyTrain(int trainNumber, const Train& updatedTrain);
     AdminResult deactivateTrain(int trainNumber);
@@ -66,6 +68,7 @@ private:
 
     Database& db_;
     Clock clock_;
+    bool adminAuthorized_ = true;
     std::string adminUser_;
     std::string logPath_;
 };

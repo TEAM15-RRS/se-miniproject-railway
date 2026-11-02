@@ -93,6 +93,7 @@ AdminResult AdminService::loggedSuccess(const std::string& successMessage,
 }
 
 AdminResult AdminService::addTrain(const Train& train) {
+    if (!adminAuthorized_) return {false, "Admin access required."};
     if (!validTrain(train)) {
         return {false, "Invalid train details. Please check all fields."};
     }
@@ -128,6 +129,7 @@ AdminResult AdminService::modifyTrain(
     int trainNumber,
     const Train& updatedTrain
 ) {
+    if (!adminAuthorized_) return {false, "Admin access required."};
     auto existing = std::find_if(
         db_.trains.begin(),
         db_.trains.end(),
@@ -164,6 +166,7 @@ AdminResult AdminService::modifyTrain(
 }
 
 AdminResult AdminService::deactivateTrain(int trainNumber) {
+    if (!adminAuthorized_) return {false, "Admin access required."};
     auto existing = std::find_if(
         db_.trains.begin(),
         db_.trains.end(),
@@ -193,6 +196,7 @@ AdminResult AdminService::updateClassFareAndQuota(
     int racSeats,
     int wlLimit
 ) {
+    if (!adminAuthorized_) return {false, "Admin access required."};
     auto trainIt = std::find_if(
         db_.trains.begin(),
         db_.trains.end(),
