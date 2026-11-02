@@ -404,4 +404,3 @@ TEST(TC_AdminLog_03_UnwritableLogPathIsReported) {
     CHECK(!result.ok);
 }
 
-}
