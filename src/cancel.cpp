@@ -8,13 +8,11 @@
 namespace rrs {
 
 int calculateRefund(const Ticket& t, long long departureMinutes, long long nowMinutes) {
-    if (t.status == Status::Waitlist) return t.totalFare;
     const long long minutesLeft = departureMinutes - nowMinutes;
-    const int n = static_cast<int>(t.passengers.size());
-    if (minutesLeft >= 48 * 60) return std::max(0, t.totalFare - kFlatCancellationFee * n);
-    if (minutesLeft >= 12 * 60) return t.totalFare * 75 / 100;
-    if (minutesLeft >= 4 * 60) return t.totalFare * 50 / 100;
-    return 0;
+    int percent = kRefundPercentUnder12h;
+    if (minutesLeft > kRefundOver24hMinutes) percent = kRefundPercentOver24h;
+    else if (minutesLeft >= kRefundFrom12hMinutes) percent = kRefundPercent12To24h;
+    return t.totalFare * percent / 100;  // whole rupees, rounded down
 }
 
 CancelResult CancelService::cancel(const std::string& pnr, const std::string& requester) {

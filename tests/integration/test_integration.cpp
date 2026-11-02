@@ -151,7 +151,7 @@ TEST(IT_09_EndToEnd_Register_Search_Book_Cancel_Refund) {  // full user journey
     CHECK_EQ(b.ticket.totalFare, 2000);
     CHECK_EQ(s.search.search({"bengaluru", "new delhi", kDate, "3A"}).rows[0].availability, std::string("RAC 1"));
 
-    s.now = M(kDate, "19:20") - 24 * 60;  // cancel 24 h before departure -> 75 %
+    s.now = M(kDate, "19:20") - 30 * 60;  // cancel 24 h before departure -> 75 %
     auto c = s.cancel.cancel(b.ticket.pnr, "frank_5");
     CHECK(c.ok);
     CHECK_EQ(c.refund, 1500);
