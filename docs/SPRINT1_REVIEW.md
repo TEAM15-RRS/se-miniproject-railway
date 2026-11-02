@@ -89,7 +89,7 @@ Sprint 1 established the core passenger reservation workflow and the supporting 
 
 The main follow-up areas were administrative functionality, additional quality and security verification, performance testing, and alignment of implementation assumptions with the SRS.
 
-Test execution results and final CI status remain subject to verification/
+Test execution results and final CI status remain subject to verification and should be recorded using the actual results from the current branch.
 
 ## 8. Action Items for Sprint 2
 
